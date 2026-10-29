@@ -20,20 +20,23 @@ private class Raw(
     val service: String,
     val label: String,
     val connected: Boolean,
+    /** physical HDMI/AV port number when it can be resolved (0 = unknown) */
+    val port: Int,
+    /** how the port was resolved: 2 = bundle extra, 1 = label, 0 = id suffix */
+    val src: Int,
 )
 
 private class Merged(
-    val canonicalId: String,
+    val canonical: Raw,
     var altId: String,
-    val label: String,
-    val connected: Boolean,
     /** label of the CEC twin collapsed into this entry (empty if none) */
     var twinLabel: String,
 )
 
-/** Passthrough inputs (HDMI/AV/…) sorted by label; multiple entries pointing at the
- *  same physical port are collapsed into one (e.g. the HDMI-CEC "PlayStation 5"
- *  entry twins with the plain "HDMI 1" input). Empty on devices without TIF (Fire TV). */
+/** Passthrough inputs (HDMI/AV/…) sorted by label; multiple entries pointing at
+ *  the same physical port (e.g. the HDMI-CEC "PlayStation 5" entry generated as
+ *  …/HDMI100004 twins with the plain "HDMI 1") collapsed into one. Empty on
+ *  devices without the TV Input Framework (Fire TV). */
 fun Context.listHardwareInputs(): List<TvInputItem> {
     val mgr = runCatching {
         getSystemService(Context.TV_INPUT_SERVICE) as? TvInputManager
@@ -56,53 +59,81 @@ fun Context.listHardwareInputs(): List<TvInputItem> {
             val connected = runCatching {
                 mgr.getInputState(info.id) != TvInputManager.INPUT_STATE_DISCONNECTED
             }.getOrDefault(true)
-            raw += Raw(info, "${info.serviceInfo.packageName}/${info.serviceInfo.name}", label, connected)
+            val suffix = info.id.substringAfterLast('/')
+            // passthrough TV inputs expose the physical port in a bundle extra
+            // on many OEMs (e.g. Medi­aTek's HDMI_PORT_ID)
+            var port = 0
+            var src = 0
+            runCatching {
+                info.extras?.let { b ->
+                    for (k in b.keySet()) {
+                        if (!k.uppercase().contains("PORT")) continue
+                        val v = b.get(k)
+                        val n = when (v) {
+                            is Int -> v
+                            is Long -> if (v in 1..32) v.toInt() else null
+                            is String -> v.trim().toIntOrNull()
+                            else -> null
+                        }
+                        if (n != null && n in 1..32) {
+                            port = n
+                            src = 2
+                        }
+                    }
+                }
+            }
+            if (port == 0) {
+                // user-visible port names like "HDMI 1" / "AV 2"
+                Regex("^HDMI\\s*([1-9])\\s*$|^AV\\s*([1-9])\\s*$", RegexOption.IGNORE_CASE)
+                    .find(label.trim())?.let { m ->
+                        (m.groupValues[1].ifEmpty { m.groupValues[2] }).toIntOrNull()
+                            ?.let { port = it; src = 1 }
+                    }
+            }
+            if (port == 0) {
+                // HDMI-CEC entries are generated as HDMI<hdmiPhysicalAddressHex><cecLogicalAddressHex>
+                // (e.g. …/HDMI100004 = device on port 1): first digit = port.
+                Regex("^HDMI([1-9])([0-9A-Fa-f]{2,})?$").find(suffix)?.let { m ->
+                    port = m.groupValues[1].toInt()
+                    src = 0
+                }
+            }
+            raw += Raw(info, "${info.serviceInfo.packageName}/${info.serviceInfo.name}", label, connected, port, src)
         }
     }
 
-    // Group entries of one service by physical port. The port number comes
-    // from the label ("HDMI 1") or from the id suffix: HDMI-CEC inputs are
-    // generated as HDMI<hdmiPhysicalAddressHex><cecLogicalAddressHex>
-    // (e.g. …/HDMI100004 = PlayStation 5 on port 1), so the digit right
-    // after "HDMI" is the port number.
+    // Collapse entries of the same service group that resolve to the same
+    // physical port. Entries without any port signal keep their own id and
+    // are never merged.
     val merged = LinkedHashMap<String, Merged>()
     for (entry in raw) {
-        val suffix = entry.info.id.substringAfterLast('/')
-        val port = Regex("^HDMI\\s*([1-9])\\s*$", RegexOption.IGNORE_CASE)
-            .find(entry.label.trim())?.groupValues?.get(1)
-            ?: Regex("^HDMI([1-9])([0-9A-Fa-f]{2,})?$")
-                .find(suffix)?.groupValues?.get(1)
-        // Without a port number the entry stays unique (never merged).
-        val key = entry.service + "#" + (port ?: "id:$suffix")
+        val key = entry.service + "#" + (if (entry.port == 0) "id:" + entry.info.id else entry.port)
         val prev = merged[key]
         if (prev == null) {
-            merged[key] = Merged(entry.info.id, "", entry.label, entry.connected, "")
+            merged[key] = Merged(entry, "", "")
             continue
         }
-        val entryIsHw = Regex("^HW\\d+$").matches(suffix)
-        val canonicalIsHw = Regex("^HW\\d+$").matches(prev.canonicalId.substringAfterLast('/'))
-        if (entryIsHw && !canonicalIsHw) {
-            // Swap: the stable hardware-port id becomes canonical, the CEC
-            // generated id demotes to the alternate.
+        if (entry.src > prev.canonical.src) {
+            // Promote the steadier source (bundle-extra port entry beats a
+            // CEC-generated id): the hardware id survives device power-off.
+            val twin = prev.canonical
             merged[key] = Merged(
-                entry.info.id,
-                prev.canonicalId,
-                entry.label,
-                entry.connected,
-                if (entry.connected && prev.label != entry.label) prev.label else "",
+                entry,
+                twin.info.id,
+                if (twin.connected && twin.label != entry.label) twin.label else prev.twinLabel,
             )
         } else {
-            if (entry.connected && entry.label != prev.label && prev.twinLabel.isEmpty()) {
+            if (entry.connected && entry.label != prev.canonical.label && prev.twinLabel.isEmpty()) {
                 prev.twinLabel = entry.label
             }
-            if (prev.altId.isEmpty() && entry.info.id != prev.canonicalId) {
+            if (prev.altId.isEmpty() && entry.info.id != prev.canonical.info.id) {
                 prev.altId = entry.info.id
             }
         }
     }
     return merged.values.map { m ->
-        val label = if (m.twinLabel.isNotEmpty()) "${m.label} (${m.twinLabel})" else m.label
-        TvInputItem(m.canonicalId, m.altId, label, m.connected)
+        val label = if (m.twinLabel.isNotEmpty()) "${m.canonical.label} (${m.twinLabel})" else m.canonical.label
+        TvInputItem(m.canonical.info.id, m.altId, label, m.canonical.connected)
     }.sortedBy { it.label.lowercase() }
 }
 
