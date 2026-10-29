@@ -54,6 +54,8 @@ data class LauncherConfig(
     /** package of the app the VPN icon opens; empty = system VPN settings */
     val vpnApp: String = "",
     val showVpnButton: Boolean = true,
+    /** switch TV inputs (HDMI/AV) straight from the status bar */
+    val showInputsButton: Boolean = true,
     /** wrap the status-bar icons in the same glass panel as dock mode */
     val statusBarGlass: Boolean = true,
     /** index into DATE_FORMATS; 0 = no date shown */

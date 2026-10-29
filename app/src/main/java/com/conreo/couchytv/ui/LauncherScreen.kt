@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,13 +70,18 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.conreo.couchytv.Actions
+import com.conreo.couchytv.R
 import com.conreo.couchytv.data.AppEntry
 import com.conreo.couchytv.data.AppRepository
 import com.conreo.couchytv.data.ConfigStore
@@ -83,7 +89,10 @@ import com.conreo.couchytv.data.LAYOUT_DOCK
 import com.conreo.couchytv.data.LAYOUT_GRID
 import com.conreo.couchytv.data.LauncherConfig
 import com.conreo.couchytv.data.NetStatus
+import com.conreo.couchytv.data.TvInputItem
+import com.conreo.couchytv.data.listHardwareInputs
 import com.conreo.couchytv.data.networkStatusFlow
+import com.conreo.couchytv.data.switchToTvInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
@@ -343,6 +352,15 @@ fun LauncherApp(rescanTick: Int) {
     var movePkg by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var wallpaperVersion by remember { mutableIntStateOf(0) }
+
+    // TV inputs (HDMI/AV). Loaded up front so the status icon only shows on
+    // devices that actually have passthrough inputs (none on Fire TV), and
+    // refreshed whenever the picker opens — a source may have been plugged in.
+    var showInputPicker by remember { mutableStateOf(false) }
+    var tvInputs by remember { mutableStateOf<List<TvInputItem>>(emptyList()) }
+    LaunchedEffect(showInputPicker) {
+        tvInputs = withContext(Dispatchers.IO) { context.listHardwareInputs() }
+    }
 
     // Drop empty sections: an empty row is dead space AND a focus trap that
     // stops D-pad navigation from reaching the section below it.
@@ -708,11 +726,13 @@ fun LauncherApp(rescanTick: Int) {
                         time = time,
                         date = date,
                         showVpn = config.showVpnButton,
+                        showInputs = config.showInputsButton && tvInputs.isNotEmpty(),
                         glass = config.statusBarGlass,
                         onVpnClick = {
                             if (config.vpnApp.isNotEmpty()) Actions.launchApp(context, config.vpnApp)
                             else Actions.openVpnSettings(context)
                         },
+                        onInputsClick = { showInputPicker = true },
                         onNetworkClick = { Actions.openNetworkSettings(context) },
                         onSettingsClick = { showSettings = true },
                     )
@@ -875,6 +895,19 @@ fun LauncherApp(rescanTick: Int) {
                     onAppInfo = { menuFor = null; Actions.openAppInfo(context, app.pkg) },
                     onClose = { menuFor = null; Actions.close(context, app.pkg) },
                     onUninstall = { menuFor = null; Actions.uninstall(context, app.pkg) },
+                )
+            }
+
+            if (showInputPicker) {
+                InputPickerDialog(
+                    inputs = tvInputs,
+                    onPick = { input ->
+                        showInputPicker = false
+                        if (!context.switchToTvInput(input.id)) {
+                            Actions.toast(context, context.getString(R.string.inputs_unavailable))
+                        }
+                    },
+                    onDismiss = { showInputPicker = false },
                 )
             }
 
@@ -1559,4 +1592,57 @@ private fun decodeDownsampled(file: File, maxWidth: Int): android.graphics.Bitma
         inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
     }
     return BitmapFactory.decodeFile(file.absolutePath, opts)
+}
+
+/* --------------------------- TV inputs picker --------------------------- */
+
+/**
+ * Passthrough TV inputs (HDMI/AV) — same look as the VPN picker in the
+ * settings sheet, so the status-bar icon opens one consistent list.
+ */
+@Composable
+private fun InputPickerDialog(
+    inputs: List<TvInputItem>,
+    onPick: (TvInputItem) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+            modifier = Modifier.width(380.dp).heightIn(max = 480.dp),
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    stringResource(R.string.inputs_dialog_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+                )
+                val firstFocus = remember { FocusRequester() }
+                // Disconnected inputs are grayed out and unfocusable — focus the
+                // first one that can actually be picked.
+                val firstEnabled = inputs.indexOfFirst { it.connected }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(inputs.size, key = { inputs[it].id }) { i ->
+                        val input = inputs[i]
+                        SettingsItem(
+                            selected = false,
+                            enabled = input.connected,
+                            onClick = { onPick(input) },
+                            headlineContent = { Text(input.label) },
+                            modifier = if (i == firstEnabled) Modifier.focusRequester(firstFocus) else Modifier,
+                        )
+                    }
+                }
+                LaunchedEffect(Unit) {
+                    // Claim focus the moment the first row's node is attached
+                    // (retry per frame, stop on the first success).
+                    repeat(30) {
+                        if (runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                        withFrameNanos {}
+                    }
+                }
+            }
+        }
+    }
 }

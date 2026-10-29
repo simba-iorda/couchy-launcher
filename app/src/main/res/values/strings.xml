@@ -152,6 +152,11 @@
     <string name="vpn_opens">VPN button opens</string>
     <string name="vpn_system">System VPN settings</string>
     <string name="vpn_dialog_title">VPN button opens…</string>
+    <string name="cd_inputs">TV inputs</string>
+    <string name="inputs_dialog_title">Switch input…</string>
+    <string name="show_inputs_button">Show inputs button</string>
+    <string name="show_inputs_button_sub">Quickly switch to HDMI / AV ports straight from the status bar</string>
+    <string name="inputs_unavailable">Input switching is unavailable on this device</string>
 
     <!-- Settings: about -->
     <string name="about_version">Version 1.0</string>

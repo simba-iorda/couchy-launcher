@@ -30,8 +30,10 @@ fun StatusBar(
     time: String,
     date: String,
     showVpn: Boolean,
+    showInputs: Boolean,
     glass: Boolean,
     onVpnClick: () -> Unit,
+    onInputsClick: () -> Unit,
     onNetworkClick: () -> Unit,
     onSettingsClick: () -> Unit,
 ) {
@@ -56,7 +58,15 @@ fun StatusBar(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        // Order: VPN · network · settings · date · clock (clock far right)
+        // Order: inputs · VPN · network · settings · date · clock (clock far right)
+        if (showInputs) {
+            StatusIcon(
+                icon = AppIcons.Tv,
+                active = true,
+                contentDescription = stringResource(R.string.cd_inputs),
+                onClick = onInputsClick,
+            )
+        }
         if (showVpn) {
             StatusIcon(
                 icon = AppIcons.Vpn,

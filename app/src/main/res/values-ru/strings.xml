@@ -133,6 +133,11 @@
     <string name="vpn_opens">Кнопка VPN открывает</string>
     <string name="vpn_system">Системные настройки VPN</string>
     <string name="vpn_dialog_title">Кнопка VPN открывает…</string>
+    <string name="cd_inputs">Входы ТВ</string>
+    <string name="inputs_dialog_title">Сменить вход…</string>
+    <string name="show_inputs_button">Показывать кнопку входов</string>
+    <string name="show_inputs_button_sub">Быстрое переключение на HDMI / AV прямо из статус-бара</string>
+    <string name="inputs_unavailable">Переключение входов недоступно на этом устройстве</string>
 
     <string name="about_version">Версия 1.0</string>
     <string name="about_desc">Лёгкий одноэкранный лаунчер для Android TV и Google TV.\n\nБез рекламы · без отслеживания · без фоновых служб. Сеть используется только для трансляции встроенных аэрообоев. Все ваши настройки хранятся в одном локальном файле на этом устройстве.</string>

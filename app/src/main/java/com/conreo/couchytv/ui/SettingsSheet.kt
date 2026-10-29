@@ -990,6 +990,14 @@ private fun StatusBarScreen(
             supportingContent = { Text(vpnLabel) },
             leadingContent = { Icon(AppIcons.Vpn, contentDescription = null) },
         )
+        SettingsItem(
+            selected = false,
+            onClick = { scope.launch { store.update { it.copy(showInputsButton = !it.showInputsButton) } } },
+            headlineContent = { Text(stringResource(R.string.show_inputs_button)) },
+            supportingContent = { Text(stringResource(R.string.show_inputs_button_sub)) },
+            leadingContent = { Icon(AppIcons.Tv, contentDescription = null) },
+            trailingContent = { CheckMark(checked = config.showInputsButton) },
+        )
     }
 
     if (pickVpn) {
@@ -1441,7 +1449,7 @@ private fun CheckMark(checked: Boolean) {
  * blurry on TV; the focused container colour alone signals selection.
  */
 @Composable
-private fun SettingsItem(
+internal fun SettingsItem(
     onClick: () -> Unit,
     headlineContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
