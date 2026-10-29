@@ -903,7 +903,7 @@ fun LauncherApp(rescanTick: Int) {
                     inputs = tvInputs,
                     onPick = { input ->
                         showInputPicker = false
-                        if (!context.switchToTvInput(input.id)) {
+                        if (!context.switchToTvInput(input.id, input.altId)) {
                             Actions.toast(context, context.getString(R.string.inputs_unavailable))
                         }
                     },
