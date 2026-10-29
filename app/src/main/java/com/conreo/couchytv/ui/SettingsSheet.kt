@@ -5,17 +5,22 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +44,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
@@ -50,10 +57,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,11 +71,14 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
-import androidx.tv.material3.ListItem
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.ProvideTextStyle
+import androidx.tv.material3.SelectableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.conreo.couchytv.Actions
 import com.conreo.couchytv.R
 import com.conreo.couchytv.data.AppEntry
@@ -164,8 +175,8 @@ fun SettingsSheet(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         // Force the dialog window to fill the screen — Compose dialogs otherwise
-        // keep a small platform margin, so the panel wouldn't sit flush against
-        // the right edge.
+        // keep a small platform margin, so the left sheet wouldn't sit flush
+        // against the screen edge.
         val dialogView = androidx.compose.ui.platform.LocalView.current
         androidx.compose.runtime.SideEffect {
             ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
@@ -178,13 +189,20 @@ fun SettingsSheet(
         // so the launcher's ScaledUi doesn't reach here — re-apply it. The
         // dialog's LocalConfiguration is the real (unscaled) device width.
         ScaledUi(uiScaleFactor(config.uiScale, androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
             Surface(
-                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
-                colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(0.dp),
+                colors = SurfaceDefaults.colors(containerColor = SettingsColors.pageBg),
                 modifier = Modifier
-                    .width(440.dp)
-                    .fillMaxHeight(),
+                    .width(557.dp)
+                    .fillMaxHeight()
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(0.dp),
+                        clip = false,
+                        ambientColor = SettingsColors.sheetShadow,
+                        spotColor = SettingsColors.sheetShadow,
+                    ),
             ) {
                 // Slide left when entering a sub-screen, right when going back
                 // to Main (the root); cross-fade so it never looks abrupt.
@@ -317,14 +335,10 @@ private fun MainScreen(
     onAbout: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.settings_title),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.settings_title))
         val f = initialFocus()
 
         // ---- Content: what shows on the home screen ----
@@ -333,14 +347,14 @@ private fun MainScreen(
             selected = false, onClick = onApps,
             headlineContent = { Text(stringResource(R.string.item_app)) },
             supportingContent = { Text(stringResource(R.string.item_app_sub)) },
-            leadingContent = { Icon(AppIcons.Apps, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Apps, contentDescription = null) },
             modifier = Modifier.focusRequester(f),
         )
         SettingsItem(
             selected = false, onClick = onCategories,
             headlineContent = { Text(stringResource(R.string.item_sections)) },
             supportingContent = { Text(stringResource(R.string.item_sections_sub)) },
-            leadingContent = { Icon(AppIcons.Folder, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Folder, contentDescription = null) },
         )
 
         // ---- Appearance: how it looks ----
@@ -349,19 +363,19 @@ private fun MainScreen(
             selected = false, onClick = onDisplay,
             headlineContent = { Text(stringResource(R.string.item_display)) },
             supportingContent = { Text(stringResource(R.string.item_display_sub)) },
-            leadingContent = { Icon(AppIcons.Display, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Display, contentDescription = null) },
         )
         SettingsItem(
             selected = false, onClick = onWallpaper,
             headlineContent = { Text(stringResource(R.string.item_wallpaper)) },
             supportingContent = { Text(stringResource(R.string.item_wallpaper_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Image, contentDescription = null) },
         )
         SettingsItem(
             selected = false, onClick = onStatusBar,
             headlineContent = { Text(stringResource(R.string.item_statusbar)) },
             supportingContent = { Text(stringResource(R.string.item_statusbar_sub)) },
-            leadingContent = { Icon(AppIcons.Wifi, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Wifi, contentDescription = null) },
         )
 
         // ---- System ----
@@ -370,18 +384,18 @@ private fun MainScreen(
             selected = false, onClick = onLauncher,
             headlineContent = { Text(stringResource(R.string.item_launcher_settings)) },
             supportingContent = { Text(stringResource(R.string.item_launcher_settings_sub)) },
-            leadingContent = { Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_couch), contentDescription = null, modifier = Modifier.size(24.dp)) },
+            leadingContent = { Icon(painter = androidx.compose.ui.res.painterResource(R.drawable.ic_couch), contentDescription = null, modifier = Modifier.size(24.dp), tint = LocalContentColor.current) },
         )
         SettingsItem(
             selected = false, onClick = onAndroidSettings,
             headlineContent = { Text(stringResource(R.string.item_android_settings)) },
             supportingContent = { Text(stringResource(R.string.item_android_settings_sub)) },
-            leadingContent = { Icon(AppIcons.Gear, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Gear, contentDescription = null) },
         )
         SettingsItem(
             selected = false, onClick = onAbout,
             headlineContent = { Text(stringResource(R.string.item_about)) },
-            leadingContent = { Icon(AppIcons.Info, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Info, contentDescription = null) },
         )
     }
 }
@@ -394,18 +408,14 @@ private fun AboutScreen(
 ) {
     val context = LocalContext.current
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_about),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_about))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+            modifier = Modifier.padding(start = 27.dp, top = 4.dp),
         ) {
             Image(
                 painter = androidx.compose.ui.res.painterResource(R.drawable.ic_couch),
@@ -416,34 +426,35 @@ private fun AboutScreen(
                 Text(
                     stringResource(R.string.app_name),
                     style = MaterialTheme.typography.titleMedium,
+                    color = SettingsColors.title,
                 )
                 Text(
                     text = "v" + (runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrDefault("?")),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = SettingsColors.subtitle,
                 )
             }
         }
         Text(
             stringResource(R.string.about_desc),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp, top = 12.dp),
+            color = SettingsColors.subtitle,
+            modifier = Modifier.padding(start = 27.dp, top = 12.dp),
         )
 
         SectionLabel(stringResource(R.string.about_foss))
         Text(
             stringResource(R.string.about_license),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp),
+            color = SettingsColors.subtitle,
+            modifier = Modifier.padding(start = 27.dp),
         )
         // Source code
         Text(
             stringResource(R.string.about_source) + "  ·  " + stringResource(R.string.github_url),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+            color = SettingsColors.iconGlyphFocused,
+            modifier = Modifier.padding(start = 27.dp, top = 8.dp),
         )
 
         // Support — scannable QR to Buy me a coffee (Cookie script font; brand name, not localized)
@@ -453,7 +464,7 @@ private fun AboutScreen(
                 androidx.compose.ui.text.font.Font(R.font.cookie)
             ),
             fontSize = 30.sp,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = SettingsColors.title,
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(top = 14.dp),
@@ -471,8 +482,8 @@ private fun AboutScreen(
         Text(
             stringResource(R.string.about_thirdparty),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp, top = 14.dp, bottom = 8.dp),
+            color = SettingsColors.subtitle,
+            modifier = Modifier.padding(start = 27.dp, top = 14.dp, bottom = 8.dp),
         )
     }
 }
@@ -490,14 +501,10 @@ private fun DisplayScreen(
         scope.launch { store.update(transform) }
     }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_display),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_display))
         SectionLabel(stringResource(R.string.section_layout))
         val f = initialFocus()
         SelectorRow(
@@ -520,7 +527,7 @@ private fun DisplayScreen(
                 selected = false,
                 onClick = { update { it.copy(showCategoryNames = !it.showCategoryNames) } },
                 headlineContent = { Text(stringResource(R.string.section_names_label)) },
-                trailingContent = { CheckMark(checked = config.showCategoryNames) },
+                trailingContent = { Switch(checked = config.showCategoryNames) },
             )
         }
         SectionLabel(stringResource(R.string.section_size))
@@ -574,18 +581,12 @@ private fun SelectorRow(
     description: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val sub = if (description != null) "$value · $description" else value
     SettingsItem(
         selected = false,
         onClick = { onSelect((current + 1) % steps) },
         headlineContent = { Text(label) },
-        supportingContent = { if (description != null) Text(description) },
-        trailingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("◄", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(value)
-                Text("►", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        },
+        supportingContent = { Text(sub) },
         modifier = modifier.onPreviewKeyEvent { e ->
             if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when (e.key) {
@@ -611,22 +612,18 @@ private fun AppsScreen(
 ) {
     val catNames = remember(config.categories) { config.categories.associate { it.id to it.name } }
 
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
-        Text(
-            stringResource(R.string.item_app),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 4.dp, start = 8.dp),
-        )
+    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 20.dp)) {
+        PageTitle(stringResource(R.string.item_app), modifier = Modifier.padding(bottom = 4.dp))
         Text(
             stringResource(R.string.app_hint),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
+            color = SettingsColors.subtitle,
+            modifier = Modifier.padding(bottom = 12.dp, start = 27.dp),
         )
         val f = initialFocus()
         LazyColumn(
             Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(apps.size, key = { apps[it].pkg }) { i ->
                 val app = apps[i]
@@ -702,83 +699,107 @@ private fun SectionAppsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.width(720.dp).height(520.dp),
-        ) {
-            Column(Modifier.fillMaxSize().padding(20.dp)) {
-                Text(cat.name, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    stringResource(R.string.section_apps_sub),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 12.dp),
+        val dialogView = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
+                ?.setLayout(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
                 )
-                val f = initialFocus()
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(apps.size, key = { apps[it].pkg }) { i ->
-                        val app = apps[i]
-                        val inSection = cat.id in AppRepository.sectionsOf(app, config)
-                        Surface(
-                            onClick = { onToggle(app) },
-                            modifier = if (i == 0) Modifier.focusRequester(f) else Modifier,
-                            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
-                            colors = ClickableSurfaceDefaults.colors(
-                                containerColor = Color.White.copy(alpha = 0.06f),
-                                focusedContainerColor = Color.White.copy(alpha = 0.18f),
-                            ),
-                            scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
-                        ) {
-                            Box(Modifier.fillMaxWidth().padding(8.dp)) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    if (app.banner != null) {
-                                        Image(
-                                            bitmap = app.banner,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .aspectRatio(16f / 9f)
-                                                .clip(RoundedCornerShape(6.dp)),
-                                        )
-                                    } else {
-                                        Box(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .aspectRatio(16f / 9f)
-                                                .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp)),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            if (app.icon != null) {
-                                                Image(bitmap = app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+        }
+        ScaledUi(uiScaleFactor(config.uiScale, androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+            Surface(
+                shape = RoundedCornerShape(0.dp),
+                colors = SurfaceDefaults.colors(containerColor = SettingsColors.pageBg),
+                modifier = Modifier
+                    .width(720.dp)
+                    .fillMaxHeight()
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(0.dp),
+                        clip = false,
+                        ambientColor = SettingsColors.sheetShadow,
+                        spotColor = SettingsColors.sheetShadow,
+                    ),
+            ) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 20.dp)) {
+                    PageTitle(cat.name)
+                    Text(
+                        stringResource(R.string.section_apps_sub),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SettingsColors.subtitle,
+                        modifier = Modifier.padding(bottom = 12.dp, start = 27.dp),
+                    )
+                    val f = initialFocus()
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(apps.size, key = { apps[it].pkg }) { i ->
+                            val app = apps[i]
+                            val inSection = cat.id in AppRepository.sectionsOf(app, config)
+                            Surface(
+                                onClick = { onToggle(app) },
+                                modifier = if (i == 0) Modifier.focusRequester(f) else Modifier,
+                                shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(10.dp)),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.White.copy(alpha = 0.06f),
+                                    focusedContainerColor = SettingsColors.focusPill,
+                                    contentColor = SettingsColors.title,
+                                    focusedContentColor = SettingsColors.titleFocused,
+                                ),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.06f),
+                            ) {
+                                Box(Modifier.fillMaxWidth().padding(8.dp)) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        if (app.banner != null) {
+                                            Image(
+                                                bitmap = app.banner,
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(16f / 9f)
+                                                    .clip(RoundedCornerShape(6.dp)),
+                                            )
+                                        } else {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(16f / 9f)
+                                                    .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                if (app.icon != null) {
+                                                    Image(bitmap = app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                                                }
                                             }
                                         }
+                                        Text(
+                                            app.label,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = SettingsColors.title,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 6.dp),
+                                        )
                                     }
-                                    Text(
-                                        app.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 6.dp),
-                                    )
-                                }
-                                Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-                                    CheckMark(checked = inSection)
+                                    Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                                        CheckMark(checked = inSection)
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                Button(onClick = onDismiss, modifier = Modifier.padding(top = 12.dp)) {
-                    Text(stringResource(R.string.done))
+                    Button(onClick = onDismiss, modifier = Modifier.padding(top = 12.dp, start = 27.dp)) {
+                        Text(stringResource(R.string.done))
+                    }
                 }
             }
+        }
         }
     }
 }
@@ -838,41 +859,37 @@ private fun LauncherSettingsSubscreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_launcher_settings),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_launcher_settings))
         SettingsItem(
             selected = false,
             onClick = { langScreen = true },
             headlineContent = { Text(stringResource(R.string.item_language)) },
             supportingContent = { Text(stringResource(R.string.item_language_sub)) },
-            leadingContent = { Icon(AppIcons.Language, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Language, contentDescription = null) },
         )
         SettingsItem(
             selected = false,
             onClick = { saveConfig() },
             headlineContent = { Text(stringResource(R.string.item_save_config)) },
             supportingContent = { Text(stringResource(R.string.item_save_config_sub)) },
-            leadingContent = { Icon(AppIcons.Save, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Save, contentDescription = null) },
         )
         SettingsItem(
             selected = false,
             onClick = { runCatching { loadPicker.launch(arrayOf("application/json", "*/*")) }.onFailure { Actions.toast(context, context.getString(R.string.toast_no_picker)) } },
             headlineContent = { Text(stringResource(R.string.item_load_config)) },
             supportingContent = { Text(stringResource(R.string.item_load_config_sub)) },
-            leadingContent = { Icon(AppIcons.Folder, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Folder, contentDescription = null) },
         )
         SettingsItem(
             selected = false,
             onClick = onRerunWizard,
             headlineContent = { Text(stringResource(R.string.rerun_wizard)) },
             supportingContent = { Text(stringResource(R.string.rerun_wizard_sub)) },
-            leadingContent = { Icon(AppIcons.Play, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Play, contentDescription = null) },
         )
     }
 }
@@ -887,14 +904,10 @@ private fun LanguageScreen(
 ) {
     val scope = rememberCoroutineScope()
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_language),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_language))
         val f = initialFocus()
         com.conreo.couchytv.data.LANGUAGES.forEachIndexed { i, code ->
             // Endonym: each language named in its own tongue (no per-language strings)
@@ -931,14 +944,10 @@ private fun StatusBarScreen(
     val vpnLabel = apps.firstOrNull { it.pkg == config.vpnApp }?.label ?: stringResource(R.string.vpn_system)
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_statusbar),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_statusbar))
         val f = initialFocus()
         SettingsItem(
             selected = false,
@@ -946,20 +955,20 @@ private fun StatusBarScreen(
             modifier = Modifier.focusRequester(f),
             headlineContent = { Text(stringResource(R.string.show_statusbar)) },
             supportingContent = { Text(stringResource(R.string.show_statusbar_sub)) },
-            trailingContent = { CheckMark(checked = config.showStatusBar) },
+            trailingContent = { Switch(checked = config.showStatusBar) },
         )
         SettingsItem(
             selected = false,
             onClick = { scope.launch { store.update { it.copy(statusBarGlass = !it.statusBarGlass) } } },
             headlineContent = { Text(stringResource(R.string.statusbar_glass)) },
             supportingContent = { Text(stringResource(R.string.statusbar_glass_sub)) },
-            trailingContent = { CheckMark(checked = config.statusBarGlass) },
+            trailingContent = { Switch(checked = config.statusBarGlass) },
         )
         SettingsItem(
             selected = false,
             onClick = { scope.launch { store.update { it.copy(h24 = !it.h24) } } },
             headlineContent = { Text(stringResource(R.string.clock_24h)) },
-            trailingContent = { CheckMark(checked = config.h24) },
+            trailingContent = { Switch(checked = config.h24) },
         )
         run {
             val idx = config.dateFormat.coerceIn(0, DATE_FORMATS.size - 1)
@@ -978,8 +987,8 @@ private fun StatusBarScreen(
             selected = false,
             onClick = { scope.launch { store.update { it.copy(showVpnButton = !it.showVpnButton) } } },
             headlineContent = { Text(stringResource(R.string.show_vpn_button)) },
-            leadingContent = { Icon(AppIcons.Vpn, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.showVpnButton) },
+            leadingContent = { SettingsIcon(AppIcons.Vpn, contentDescription = null) },
+            trailingContent = { Switch(checked = config.showVpnButton) },
         )
         // Grayed out (and not focusable) while the VPN button is hidden
         SettingsItem(
@@ -988,60 +997,80 @@ private fun StatusBarScreen(
             onClick = { pickVpn = true },
             headlineContent = { Text(stringResource(R.string.vpn_opens)) },
             supportingContent = { Text(vpnLabel) },
-            leadingContent = { Icon(AppIcons.Vpn, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Vpn, contentDescription = null) },
         )
         SettingsItem(
             selected = false,
             onClick = { scope.launch { store.update { it.copy(showInputsButton = !it.showInputsButton) } } },
             headlineContent = { Text(stringResource(R.string.show_inputs_button)) },
             supportingContent = { Text(stringResource(R.string.show_inputs_button_sub)) },
-            leadingContent = { Icon(AppIcons.Tv, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.showInputsButton) },
+            leadingContent = { SettingsIcon(AppIcons.Tv, contentDescription = null) },
+            trailingContent = { Switch(checked = config.showInputsButton) },
         )
     }
 
     if (pickVpn) {
-        Dialog(onDismissRequest = { pickVpn = false }) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.width(380.dp).height(480.dp),
-            ) {
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(
-                        stringResource(R.string.vpn_dialog_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+        Dialog(
+            onDismissRequest = { pickVpn = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            val dialogView = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.SideEffect {
+                ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
+                    ?.setLayout(
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
                     )
-                    val fv = initialFocus()
-                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        item {
-                            SettingsItem(
-                                selected = false,
-                                onClick = {
-                                    scope.launch { store.update { it.copy(vpnApp = "") } }
-                                    pickVpn = false
-                                },
-                                headlineContent = { Text(stringResource(R.string.vpn_system)) },
-                                trailingContent = { CheckMark(checked = config.vpnApp.isEmpty()) },
-                                modifier = Modifier.focusRequester(fv),
-                            )
-                        }
-                        items(apps.size, key = { apps[it].pkg }) { i ->
-                            val app = apps[i]
-                            SettingsItem(
-                                selected = false,
-                                onClick = {
-                                    scope.launch { store.update { it.copy(vpnApp = app.pkg) } }
-                                    pickVpn = false
-                                },
-                                headlineContent = { Text(app.label) },
-                                leadingContent = { AppThumb(app) },
-                                trailingContent = { CheckMark(checked = config.vpnApp == app.pkg) },
-                            )
+            }
+            ScaledUi(uiScaleFactor(config.uiScale, androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp)) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                Surface(
+                    shape = RoundedCornerShape(0.dp),
+                    colors = SurfaceDefaults.colors(containerColor = SettingsColors.pageBg),
+                    modifier = Modifier
+                        .width(557.dp)
+                        .fillMaxHeight()
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = RoundedCornerShape(0.dp),
+                            clip = false,
+                            ambientColor = SettingsColors.sheetShadow,
+                            spotColor = SettingsColors.sheetShadow,
+                        ),
+                ) {
+                    Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 20.dp)) {
+                        PageTitle(stringResource(R.string.vpn_dialog_title))
+                        val fv = initialFocus()
+                        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            item {
+                                SettingsItem(
+                                    selected = false,
+                                    onClick = {
+                                        scope.launch { store.update { it.copy(vpnApp = "") } }
+                                        pickVpn = false
+                                    },
+                                    headlineContent = { Text(stringResource(R.string.vpn_system)) },
+                                    trailingContent = { CheckMark(checked = config.vpnApp.isEmpty()) },
+                                    modifier = Modifier.focusRequester(fv),
+                                )
+                            }
+                            items(apps.size, key = { apps[it].pkg }) { i ->
+                                val app = apps[i]
+                                SettingsItem(
+                                    selected = false,
+                                    onClick = {
+                                        scope.launch { store.update { it.copy(vpnApp = app.pkg) } }
+                                        pickVpn = false
+                                    },
+                                    headlineContent = { Text(app.label) },
+                                    leadingContent = { AppThumb(app) },
+                                    trailingContent = { CheckMark(checked = config.vpnApp == app.pkg) },
+                                )
+                            }
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1061,14 +1090,10 @@ private fun CategoriesScreen(
     var appsFor by remember { mutableStateOf<CategoryCfg?>(null) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_sections),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_sections))
         val f = initialFocus()
         // Auto-filled "All apps" section: a single toggle, no per-app assignment.
         run {
@@ -1090,8 +1115,8 @@ private fun CategoriesScreen(
                 modifier = Modifier.focusRequester(f),
                 headlineContent = { Text(allName) },
                 supportingContent = { Text(stringResource(R.string.all_apps_sub)) },
-                leadingContent = { Icon(AppIcons.Apps, contentDescription = null) },
-                trailingContent = { CheckMark(checked = hasAll) },
+                leadingContent = { SettingsIcon(AppIcons.Apps, contentDescription = null) },
+                trailingContent = { Switch(checked = hasAll) },
             )
         }
         config.categories.forEachIndexed { i, cat ->
@@ -1107,7 +1132,7 @@ private fun CategoriesScreen(
                         onClick = { appsFor = cat },
                         headlineContent = { Text(cat.name) },
                         supportingContent = { Text(stringResource(R.string.section_row_sub)) },
-                        leadingContent = { Icon(AppIcons.Folder, contentDescription = null) },
+                        leadingContent = { SettingsIcon(AppIcons.Folder, contentDescription = null) },
                     )
                 }
                 SmallIconButton(AppIcons.Pencil, stringResource(R.string.rename_section)) { renameFor = cat }
@@ -1154,7 +1179,7 @@ private fun CategoriesScreen(
                 }
             },
             headlineContent = { Text(stringResource(R.string.add_section)) },
-            leadingContent = { Icon(AppIcons.Add, contentDescription = null) },
+            leadingContent = { SettingsIcon(AppIcons.Add, contentDescription = null) },
         )
     }
 
@@ -1205,36 +1230,63 @@ private fun RenameDialog(
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initial) }
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        ) {
-            Column(Modifier.width(340.dp).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(stringResource(R.string.rename_section), style = MaterialTheme.typography.titleMedium)
-                val f = initialFocus()
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
-                ) {
-                    BasicTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = { if (name.isNotBlank()) onSave(name.trim()) }
-                        ),
-                        modifier = Modifier.fillMaxWidth().focusRequester(f),
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text(stringResource(R.string.save)) }
-                    Button(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        val dialogView = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.SideEffect {
+            ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
+                ?.setLayout(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                )
+        }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+            Surface(
+                shape = RoundedCornerShape(0.dp),
+                colors = SurfaceDefaults.colors(containerColor = SettingsColors.pageBg),
+                modifier = Modifier
+                    .width(557.dp)
+                    .fillMaxHeight()
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(0.dp),
+                        clip = false,
+                        ambientColor = SettingsColors.sheetShadow,
+                        spotColor = SettingsColors.sheetShadow,
+                    ),
+            ) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PageTitle(stringResource(R.string.rename_section))
+                    val f = initialFocus()
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 27.dp)
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 12.dp)
+                    ) {
+                        BasicTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            singleLine = true,
+                            textStyle = TextStyle(color = SettingsColors.title, fontSize = 18.7.sp),
+                            cursorBrush = SolidColor(SettingsColors.iconGlyphFocused),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = { if (name.isNotBlank()) onSave(name.trim()) }
+                            ),
+                            modifier = Modifier.fillMaxWidth().focusRequester(f),
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(start = 27.dp),
+                    ) {
+                        Button(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text(stringResource(R.string.save)) }
+                        Button(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                    }
                 }
             }
         }
@@ -1259,14 +1311,10 @@ private fun WallpaperScreen(
     onPickVideo: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp).padding(bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.item_wallpaper),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
+        PageTitle(stringResource(R.string.item_wallpaper))
         val f = initialFocus()
         val staticActive = !config.useBuiltinAerials &&
             !config.useVideoWallpaper && !config.useCustomWallpaper
@@ -1301,8 +1349,8 @@ private fun WallpaperScreen(
         SettingsItem(
             selected = false, onClick = { onPreset(presetIdx) },
             headlineContent = { Text(stringResource(R.string.color_gradient)) },
-            leadingContent = { Icon(AppIcons.Palette, contentDescription = null) },
-            trailingContent = { CheckMark(checked = staticActive) },
+            leadingContent = { SettingsIcon(AppIcons.Palette, contentDescription = null) },
+            trailingContent = { Switch(checked = staticActive) },
         )
         if (staticActive) {
             val presetNames = listOf(
@@ -1326,8 +1374,8 @@ private fun WallpaperScreen(
             selected = false, onClick = onPickPhoto,
             headlineContent = { Text(stringResource(R.string.pick_photo)) },
             supportingContent = { Text(stringResource(R.string.pick_photo_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useCustomWallpaper) },
+            leadingContent = { SettingsIcon(AppIcons.Image, contentDescription = null) },
+            trailingContent = { Switch(checked = config.useCustomWallpaper) },
         )
 
         /* ---------------- VIDEO: built-in aerials + your own video ---------------- */
@@ -1338,8 +1386,8 @@ private fun WallpaperScreen(
             selected = false, onClick = onSelectBuiltinAerials,
             headlineContent = { Text(stringResource(R.string.builtin_aerials)) },
             supportingContent = { Text(stringResource(R.string.builtin_aerials_sub)) },
-            leadingContent = { Icon(AppIcons.Play, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useBuiltinAerials) },
+            leadingContent = { SettingsIcon(AppIcons.Play, contentDescription = null) },
+            trailingContent = { Switch(checked = config.useBuiltinAerials) },
         )
         if (config.useBuiltinAerials) {
             val sourceNames = listOf(
@@ -1364,8 +1412,8 @@ private fun WallpaperScreen(
             selected = false, onClick = onPickVideo,
             headlineContent = { Text(stringResource(R.string.pick_video)) },
             supportingContent = { Text(stringResource(R.string.pick_video_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useVideoWallpaper) },
+            leadingContent = { SettingsIcon(AppIcons.Image, contentDescription = null) },
+            trailingContent = { Switch(checked = config.useVideoWallpaper) },
         )
 
         // Playback speed — applies to aerials and your own video.
@@ -1406,12 +1454,27 @@ private fun initialFocus(): FocusRequester {
 }
 
 @Composable
+private fun PageTitle(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        fontSize = 42.7.sp,
+        fontWeight = FontWeight.Medium,
+        color = SettingsColors.title,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier.padding(start = 27.dp, top = 32.dp, bottom = 16.dp),
+    )
+}
+
+@Composable
 private fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp, start = 8.dp, bottom = 4.dp),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        color = SettingsColors.sectionLabel,
+        letterSpacing = 0.5.sp,
+        modifier = Modifier.padding(start = 27.dp, top = 24.dp, bottom = 8.dp),
     )
 }
 
@@ -1421,13 +1484,13 @@ private fun CheckMark(checked: Boolean) {
         Modifier
             .size(22.dp)
             .background(
-                if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
+                if (checked) SettingsColors.iconGlyphFocused else Color.Transparent,
                 RoundedCornerShape(5.dp),
             )
             .border(
                 width = 2.dp,
-                color = if (checked) MaterialTheme.colorScheme.primary
-                else Color.White.copy(alpha = 0.4f),
+                color = if (checked) SettingsColors.iconGlyphFocused
+                else SettingsColors.iconGlyph.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(5.dp),
             ),
         contentAlignment = Alignment.Center,
@@ -1444,9 +1507,67 @@ private fun CheckMark(checked: Boolean) {
 }
 
 /**
- * A settings row with NO focus scale. tv-material's default focusedScale
- * scales the whole row — including its already-rasterized text — which looks
- * blurry on TV; the focused container colour alone signals selection.
+ * System-settings switch: muted slate track, large circular thumb that overhangs
+ * the track, no gap. The ON state matches the reference screenshot; OFF is
+ * derived with the same muted palette.
+ */
+@Composable
+private fun Switch(checked: Boolean, modifier: Modifier = Modifier) {
+    val trackWidth = 44.dp
+    val trackHeight = 18.7.dp
+    val thumbSize = 26.7.dp
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) trackWidth - thumbSize else 0.dp,
+        label = "switchThumb",
+    )
+    Box(
+        modifier = modifier.size(trackWidth, trackHeight),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    if (checked) SettingsColors.switchTrackOn else SettingsColors.switchTrackOff,
+                    RoundedCornerShape(14.dp),
+                )
+        )
+        Box(
+            modifier = Modifier
+                .size(thumbSize)
+                .offset(x = thumbOffset)
+                .background(
+                    if (checked) SettingsColors.switchThumbOn else SettingsColors.switchThumbOff,
+                    CircleShape,
+                )
+        )
+    }
+}
+
+/**
+ * System-settings icon: respects the LocalContentColor provided by [SettingsItem]
+ * so idle glyphs are muted gray and focused glyphs turn accent blue. The
+ * hand-defined [AppIcons] vectors have an explicit white fill, so tint must be
+ * passed explicitly.
+ */
+@Composable
+private fun SettingsIcon(
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    Icon(
+        imageVector = icon,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        tint = LocalContentColor.current,
+    )
+}
+
+/**
+ * A system-TV-settings list row: transparent when idle, light pill with shadow
+ * and 1.05× scale when focused, icon in a circular chip, text stacked under the
+ * title. All metrics come from the measured reference.
  */
 @Composable
 internal fun SettingsItem(
@@ -1456,30 +1577,97 @@ internal fun SettingsItem(
     selected: Boolean = false,
     enabled: Boolean = true,
     supportingContent: (@Composable () -> Unit)? = null,
-    leadingContent: (@Composable androidx.compose.foundation.layout.BoxScope.() -> Unit)? = null,
+    leadingContent: (@Composable BoxScope.() -> Unit)? = null,
     trailingContent: (@Composable () -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
-    ListItem(
-        selected = selected,
-        enabled = enabled,
+    val shadowElevation by animateDpAsState(
+        targetValue = if (focused) 24.dp else 0.dp,
+        label = "settingsRowShadow",
+    )
+
+    Surface(
         onClick = onClick,
+        enabled = enabled,
+        selected = selected,
         modifier = modifier
             .onFocusChanged { focused = it.isFocused || it.hasFocus }
-            .padding(horizontal = 8.dp)
-            .background(
-                if (focused) Color(0xFFF1F2F4) else Color.Transparent,
-                RoundedCornerShape(12.dp)
+            .then(
+                if (focused) Modifier.shadow(
+                    elevation = shadowElevation,
+                    shape = RoundedCornerShape(10.7.dp),
+                    clip = false,
+                    ambientColor = Color(0x59000000),
+                    spotColor = Color(0x59000000),
+                ) else Modifier
             ),
-        headlineContent = headlineContent,
-        supportingContent = supportingContent,
-        leadingContent = leadingContent,
-        trailingContent = trailingContent,
-        colors = androidx.tv.material3.ListItemDefaults.colors(
-            focusedContainerColor = Color.Transparent,
-            focusedContentColor = Color(0xFF14151A),
+        shape = SelectableSurfaceDefaults.shape(RoundedCornerShape(10.7.dp)),
+        colors = SelectableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = SettingsColors.focusPill,
+            contentColor = SettingsColors.title,
+            focusedContentColor = SettingsColors.titleFocused,
+            disabledContainerColor = Color.Transparent,
+            disabledContentColor = SettingsColors.title.copy(alpha = 0.58f),
         ),
-    )
+        scale = SelectableSurfaceDefaults.scale(focusedScale = 1.05f),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 81.dp)
+                .padding(start = 27.dp, end = 40.dp)
+                .alpha(if (enabled) 1f else 0.58f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            if (leadingContent != null) {
+                Box(
+                    modifier = Modifier
+                        .size(53.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (focused) SettingsColors.iconChipFocused else SettingsColors.iconChip,
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides if (focused) SettingsColors.iconGlyphFocused else SettingsColors.iconGlyph
+                    ) {
+                        leadingContent()
+                    }
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                ProvideTextStyle(
+                    TextStyle(
+                        color = if (focused) SettingsColors.titleFocused else SettingsColors.title,
+                        fontSize = 18.7.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                ) {
+                    headlineContent()
+                }
+                if (supportingContent != null) {
+                    ProvideTextStyle(
+                        TextStyle(
+                            color = if (focused) SettingsColors.subtitleFocused else SettingsColors.subtitle,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Normal,
+                        )
+                    ) {
+                        supportingContent()
+                    }
+                }
+            }
+            if (trailingContent != null) {
+                Box(contentAlignment = Alignment.Center) {
+                    trailingContent()
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -39,6 +39,34 @@ fun tileColor(pkg: String): Color {
     return palette[((h % palette.size) + palette.size) % palette.size]
 }
 
+/**
+ * Palette and metrics for the system-TV-settings skin used by the settings
+ * overlay and shared pickers. These tokens are intentionally isolated from
+ * the launcher theme so the dock/wallpaper/cards stay untouched.
+ */
+object SettingsColors {
+    val pageBg = Color(0xFF1E232C)
+    val title = Color(0xFFE8EAED)
+    val subtitle = Color(0xFF979AA0)
+    val sectionLabel = Color(0xFF9AA0A6)
+
+    val focusPill = Color(0xFFE8EAED)
+    val titleFocused = Color(0xFF0E0E0F)
+    val subtitleFocused = Color(0xFF656668)
+
+    val iconChip = Color(0xFF263041)
+    val iconGlyph = Color(0xFFAEB2B9)
+    val iconChipFocused = Color(0xFFD3E0F5)
+    val iconGlyphFocused = Color(0xFF4285F4)
+
+    val switchTrackOn = Color(0xFF3E4C68)
+    val switchThumbOn = Color(0xFF3A76E2)
+    val switchTrackOff = Color(0xFF2A3341)
+    val switchThumbOff = Color(0xFF8A8F96)
+
+    val sheetShadow = Color(0x45000000)
+}
+
 @Composable
 fun LiteTvTheme(accent: Color, content: @Composable () -> Unit) {
     MaterialTheme(

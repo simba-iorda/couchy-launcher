@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -70,11 +73,15 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -901,6 +908,7 @@ fun LauncherApp(rescanTick: Int) {
             if (showInputPicker) {
                 InputPickerDialog(
                     inputs = tvInputs,
+                    config = config,
                     onPick = { input ->
                         showInputPicker = false
                         if (!context.switchToTvInput(input.id, input.altId)) {
@@ -1597,52 +1605,84 @@ private fun decodeDownsampled(file: File, maxWidth: Int): android.graphics.Bitma
 /* --------------------------- TV inputs picker --------------------------- */
 
 /**
- * Passthrough TV inputs (HDMI/AV) — same look as the VPN picker in the
- * settings sheet, so the status-bar icon opens one consistent list.
+ * Passthrough TV inputs (HDMI/AV) — same left-sheet skin as the settings
+ * overlay, so the status-bar icon opens one consistent list.
  */
 @Composable
 private fun InputPickerDialog(
     inputs: List<TvInputItem>,
+    config: LauncherConfig,
     onPick: (TvInputItem) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.width(380.dp).heightIn(max = 480.dp),
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Text(
-                    stringResource(R.string.inputs_dialog_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        val dialogView = LocalView.current
+        SideEffect {
+            ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
+                ?.setLayout(
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
                 )
-                val firstFocus = remember { FocusRequester() }
-                // Disconnected inputs are grayed out and unfocusable — focus the
-                // first one that can actually be picked.
-                val firstEnabled = inputs.indexOfFirst { it.connected }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(inputs.size, key = { inputs[it].id }) { i ->
-                        val input = inputs[i]
-                        SettingsItem(
-                            selected = false,
-                            enabled = input.connected,
-                            onClick = { onPick(input) },
-                            headlineContent = { Text(input.label) },
-                            modifier = if (i == firstEnabled) Modifier.focusRequester(firstFocus) else Modifier,
-                        )
+        }
+        ScaledUi(uiScaleFactor(config.uiScale, LocalConfiguration.current.screenWidthDp)) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+            Surface(
+                shape = RoundedCornerShape(0.dp),
+                colors = SurfaceDefaults.colors(containerColor = SettingsColors.pageBg),
+                modifier = Modifier
+                    .width(557.dp)
+                    .fillMaxHeight()
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(0.dp),
+                        clip = false,
+                        ambientColor = SettingsColors.sheetShadow,
+                        spotColor = SettingsColors.sheetShadow,
+                    ),
+            ) {
+                Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 20.dp)) {
+                    Text(
+                        stringResource(R.string.inputs_dialog_title),
+                        fontSize = 42.7.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SettingsColors.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 27.dp, top = 32.dp, bottom = 16.dp),
+                    )
+                    val firstFocus = remember { FocusRequester() }
+                    // Disconnected inputs are grayed out and unfocusable — focus the
+                    // first one that can actually be picked.
+                    val firstEnabled = inputs.indexOfFirst { it.connected }
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(inputs.size, key = { inputs[it].id }) { i ->
+                            val input = inputs[i]
+                            SettingsItem(
+                                selected = false,
+                                enabled = input.connected,
+                                onClick = { onPick(input) },
+                                headlineContent = { Text(input.label) },
+                                modifier = if (i == firstEnabled) Modifier.focusRequester(firstFocus) else Modifier,
+                            )
+                        }
                     }
-                }
-                LaunchedEffect(Unit) {
-                    // Claim focus the moment the first row's node is attached
-                    // (retry per frame, stop on the first success).
-                    repeat(30) {
-                        if (runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
-                        withFrameNanos {}
+                    LaunchedEffect(Unit) {
+                        // Claim focus the moment the first row's node is attached
+                        // (retry per frame, stop on the first success).
+                        repeat(30) {
+                            if (runCatching { firstFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+                            withFrameNanos {}
+                        }
                     }
                 }
             }
+        }
         }
     }
 }
